@@ -1,0 +1,205 @@
+/* ── VaultRAG Chat View ───────────────────────────────────────────────────── */
+
+.vaultrag-chat-view {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  overflow: hidden;
+}
+
+/* ── Header ──────────────────────────────────────────────────────────────────*/
+
+.vaultrag-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--background-modifier-border);
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  background: var(--color-base-00);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.07);
+}
+
+.vaultrag-title {
+  font-weight: 600;
+  font-size: 0.9em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background-color: var(--color-base-00);
+ }
+
+.vaultrag-clear-btn {
+  font-size: 0.75em;
+  padding: 2px 8px;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  color: var(--text-muted);
+}
+
+.vaultrag-clear-btn:hover {
+  color: var(--text-normal);
+  border-color: var(--text-muted);
+}
+
+/* ── Messages ────────────────────────────────────────────────────────────────*/
+
+.vaultrag-messages {
+  flex: 1;
+  overflow-y: auto;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.vaultrag-message {
+  max-width: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.vaultrag-message--user .vaultrag-message-content {
+  align-self: flex-end;
+  background: var(--color-accent);
+  color: var(--text-on-accent);
+  border-radius: 12px 12px 2px 12px;
+  padding: 8px 12px;
+  max-width: 85%;
+  word-break: break-word;
+  white-space: pre-wrap;
+}
+
+.vaultrag-message--assistant .vaultrag-message-content {
+  align-self: flex-start;
+  background: var(--background-secondary);
+  border-radius: 2px 12px 12px 12px;
+  padding: 10px 14px;
+  max-width: 100%;
+  word-break: break-word;
+}
+
+/* Ensure rendered markdown elements look natural inside bubbles */
+.vaultrag-message-content>*:first-child {
+  margin-top: 0;
+}
+
+.vaultrag-message-content>*:last-child {
+  margin-bottom: 0;
+}
+
+/* ── Sources block ────────────────────────────────────────────────────────────*/
+
+.vaultrag-sources {
+  font-size: 0.8em;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.vaultrag-sources summary {
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  padding: 2px 4px;
+  border-radius: 4px;
+}
+
+.vaultrag-sources summary:hover {
+  background: var(--background-modifier-hover);
+}
+
+.vaultrag-source-list {
+  margin: 4px 0 0 12px;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.vaultrag-source-link {
+  color: var(--text-accent);
+  text-decoration: none;
+  font-size: 0.85em;
+}
+
+.vaultrag-source-link:hover {
+  text-decoration: underline;
+}
+
+/* ── Copy button ─────────────────────────────────────────────────────────────*/
+
+.vaultrag-copy-btn {
+  align-self: flex-start;
+  font-size: 0.75em;
+  padding: 2px 8px;
+  cursor: pointer;
+  background: transparent;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: 4px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.vaultrag-copy-btn:hover {
+  color: var(--text-normal);
+  border-color: var(--text-muted);
+}
+
+/* ── Input row ────────────────────────────────────────────────────────────────*/
+
+.vaultrag-input-row {
+  display: flex;
+  gap: 6px;
+  padding: 10px 12px;
+  border-top: 1px solid var(--background-modifier-border);
+  flex-shrink: 0;
+  align-items: flex-end;
+}
+
+.vaultrag-input {
+  flex: 1;
+  resize: none;
+  min-height: 38px;
+  max-height: 120px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  border: 1px solid var(--background-modifier-border);
+  background: var(--background-primary);
+  color: var(--text-normal);
+  font-family: inherit;
+  font-size: 0.9em;
+  line-height: 1.4;
+  overflow-y: auto;
+}
+
+.vaultrag-input:focus {
+  outline: none;
+  border-color: var(--interactive-accent);
+}
+
+.vaultrag-send-btn {
+  padding: 8px 14px;
+  border-radius: 6px;
+  border: none;
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  font-size: 0.9em;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.vaultrag-send-btn:hover {
+  background: var(--interactive-accent-hover);
+}
+
+.vaultrag-send-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

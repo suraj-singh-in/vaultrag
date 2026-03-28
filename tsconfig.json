@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "baseUrl": ".",
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "inlineSourceMap": true,
+    "inlineSources": true,
+    "strict": true,
+    "noImplicitAny": true,
+    "strictNullChecks": true,
+    "noImplicitReturns": true,
+    "isolatedModules": true,
+    "skipLibCheck": true
+  },
+  "include": ["src/**/*.ts", "__mocks__/**/*.ts", "jest.config.ts"]
+}

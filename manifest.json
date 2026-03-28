@@ -1,0 +1,11 @@
+{
+  "id": "vaultrag",
+  "name": "VaultRAG",
+  "version": "0.1.0",
+  "minAppVersion": "1.4.0",
+  "description": "Retrieval-Augmented Generation for your Obsidian vault — chat with your notes using multi-provider AI.",
+  "author": "VaultRAG",
+  "authorUrl": "",
+  "fundingUrl": "",
+  "isDesktopOnly": true
+}
