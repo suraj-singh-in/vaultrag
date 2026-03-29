@@ -4,8 +4,8 @@
   "version": "0.0.1",
   "minAppVersion": "1.4.0",
   "description": "Retrieval-Augmented Generation for your Obsidian vault — chat with your notes using multi-provider AI.",
-  "author": "VaultRAG",
-  "authorUrl": "",
+  "author": "Suraj Singh",
+  "authorUrl": "https://github.com/suraj-singh-in",
   "fundingUrl": "",
   "isDesktopOnly": true
 }

@@ -41,6 +41,21 @@ export default class VaultRAGPlugin extends Plugin {
    */
   private _infraPromise: Promise<boolean> | null = null;
 
+  /** True while a re-index run is in progress. */
+  isReindexing = false;
+
+  /** Subscribers notified on each file during a re-index run. */
+  private _reindexListeners = new Set<(done: number, total: number) => void>();
+
+  onReindexProgress(cb: (done: number, total: number) => void): () => void {
+    this._reindexListeners.add(cb);
+    return () => this._reindexListeners.delete(cb);
+  }
+
+  private _emitReindexProgress(done: number, total: number): void {
+    for (const cb of this._reindexListeners) cb(done, total);
+  }
+
   // ── Lifecycle ──────────────────────────────────────────────────────────────
 
   async onload(): Promise<void> {
@@ -70,7 +85,7 @@ export default class VaultRAGPlugin extends Plugin {
     this.addCommand({
       id:       'reindex-vault',
       name:     'Re-index vault',
-      callback: () => this.runReIndex(),
+      callback: () => { void this.runReIndex(); },
     });
 
     // Settings tab
@@ -266,13 +281,32 @@ export default class VaultRAGPlugin extends Plugin {
     ).open();
   }
 
-  private async runReIndex(): Promise<void> {
+  async runReIndex(): Promise<void> {
     if (!await this.ensureInfrastructure()) return;
+    if (this.isReindexing) return;
+
+    this.isReindexing = true;
+    this._emitReindexProgress(0, 0);
     new Notice('VaultRAG: starting re-index…');
-    const result = await this.indexer!.indexAll();
-    const failNote = result.errors.length > 0 ? `, ${result.errors.length} failed` : '';
-    new Notice(
-      `VaultRAG: re-index complete — ${result.indexed} indexed, ${result.skipped} skipped${failNote}`,
-    );
+
+    try {
+      const result = await this.indexer!.indexAll((event) => {
+        this._emitReindexProgress(event.done, event.total);
+      });
+
+      const failNote = result.errors.length > 0 ? `, ${result.errors.length} failed` : '';
+      this.settings.lastIndexRun = {
+        timestamp:  Date.now(),
+        indexed:    result.indexed,
+        skipped:    result.skipped,
+        totalFiles: result.indexed + result.skipped + result.errors.length,
+        errors:     result.errors.map(e => ({ file: e.file, error: e.error.message })),
+      };
+      await this.saveSettings();
+      new Notice(`VaultRAG: re-index complete — ${result.indexed} indexed, ${result.skipped} skipped${failNote}`);
+    } finally {
+      this.isReindexing = false;
+      this._emitReindexProgress(-1, -1); // sentinel: signals completion
+    }
   }
 }

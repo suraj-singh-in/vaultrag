@@ -29,12 +29,13 @@
   right: 0;
   bottom: 0;
   width: var(--vr-panel-width);
-  z-index: 20;                         /* above workspace, below modals (z=50) */
+  z-index: 20;
+  /* above workspace, below modals (z=50) */
 
   /* Slide out by default */
   transform: translateX(100%);
   transition: transform var(--anim-duration-moderate) var(--anim-motion-smooth),
-              box-shadow var(--anim-duration-moderate) var(--anim-motion-smooth);
+    box-shadow var(--anim-duration-moderate) var(--anim-motion-smooth);
 
   /* Glassy panel surface */
   background: var(--background-primary);
@@ -65,7 +66,8 @@
 .vaultrag-panel-resize::after {
   content: '';
   position: absolute;
-  inset: 0 -2px;                        /* widen hit target without visual change */
+  inset: 0 -2px;
+  /* widen hit target without visual change */
 }
 
 .vaultrag-panel-resize:hover,
@@ -117,7 +119,7 @@
   color: var(--text-faint);
   cursor: pointer;
   transition: color var(--vr-transition), background var(--vr-transition),
-              border-color var(--vr-transition);
+    border-color var(--vr-transition);
   flex-shrink: 0;
 }
 
@@ -135,6 +137,7 @@
 
 .vaultrag-panel .vaultrag-messages {
   flex: 1;
+  min-height: 0;
   overflow-y: auto;
 }
 
@@ -169,6 +172,7 @@
   z-index: 10;
   background: var(--color-base-00);
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.07);
+  border-radius: var(--radius-m);
 }
 
 .vaultrag-title {
@@ -195,6 +199,7 @@
   cursor: pointer;
   transition: color var(--vr-transition);
   line-height: 1;
+  box-shadow: none !important;
 }
 
 .vaultrag-clear-btn:hover {
@@ -208,8 +213,10 @@
 /* ── Message stream ──────────────────────────────────────────────────────── */
 
 .vaultrag-messages {
-  flex: 1;
-  overflow-y: auto;
+  overflow: scroll;
+  height: calc(100% - 120px);
+  width: 100%;
+  min-height: 0;
   padding: var(--size-4-5) var(--size-4-3) var(--size-4-3);
   display: flex;
   flex-direction: column;
@@ -221,13 +228,16 @@
 .vaultrag-messages::-webkit-scrollbar {
   width: 4px;
 }
+
 .vaultrag-messages::-webkit-scrollbar-track {
   background: transparent;
 }
+
 .vaultrag-messages::-webkit-scrollbar-thumb {
   background: var(--scrollbar-thumb-bg);
   border-radius: var(--radius-l);
 }
+
 .vaultrag-messages::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-active-thumb-bg);
 }
@@ -246,6 +256,7 @@
     opacity: 0;
     transform: translateY(5px);
   }
+
   to {
     opacity: 1;
     transform: translateY(0);
@@ -260,6 +271,7 @@
 }
 
 .vaultrag-message--user .vaultrag-message-content {
+  user-select: text;
   background: var(--interactive-accent);
   border: none;
   border-radius: var(--radius-m) var(--radius-m) 2px var(--radius-m);
@@ -279,6 +291,7 @@
 }
 
 .vaultrag-message--assistant .vaultrag-message-content {
+  user-select: text;
   width: 100%;
   background: transparent;
   padding: 0;
@@ -289,10 +302,11 @@
 }
 
 /* Markdown element spacing inside assistant content */
-.vaultrag-message--assistant .vaultrag-message-content > *:first-child {
+.vaultrag-message--assistant .vaultrag-message-content>*:first-child {
   margin-top: 0 !important;
 }
-.vaultrag-message--assistant .vaultrag-message-content > *:last-child {
+
+.vaultrag-message--assistant .vaultrag-message-content>*:last-child {
   margin-bottom: 0 !important;
 }
 
@@ -391,9 +405,50 @@
   margin: var(--size-4-4) 0;
 }
 
+/* ── Typing indicator ────────────────────────────────────────────────────── */
+
+.vaultrag-typing {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: var(--size-4-2) 0;
+}
+
+.vaultrag-typing span {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  animation: vr-typing-bounce 1.2s ease-in-out infinite;
+}
+
+.vaultrag-typing span:nth-child(2) {
+  animation-delay: 0.2s;
+}
+
+.vaultrag-typing span:nth-child(3) {
+  animation-delay: 0.4s;
+}
+
+@keyframes vr-typing-bounce {
+
+  0%,
+  60%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.4;
+  }
+
+  30% {
+    transform: translateY(-5px);
+    opacity: 1;
+  }
+}
+
 /* ── Visual divider between message groups ───────────────────────────────── */
 
-.vaultrag-message--user + .vaultrag-message--user {
+.vaultrag-message--user+.vaultrag-message--user {
   margin-top: calc(-1 * var(--size-4-3));
 }
 
@@ -438,7 +493,7 @@
   flex-shrink: 0;
 }
 
-.vaultrag-sources[open] > summary::before {
+.vaultrag-sources[open]>summary::before {
   transform: rotate(90deg);
   opacity: 0.8;
 }
@@ -569,9 +624,14 @@
   display: flex;
   gap: var(--size-4-2);
   padding: var(--size-4-2) var(--size-4-3) var(--size-4-3);
-  border-top: var(--border-width) solid var(--background-modifier-border);
   flex-shrink: 0;
   align-items: center;
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.12);
+  border-radius: var(--radius-m);
+  background: var(--background-primary);
 }
 
 .vaultrag-input {
@@ -667,9 +727,9 @@
 
 /* ── Section heading shared style ────────────────────────────────────────── */
 
-.vaultrag-stats-section > h3,
-.vaultrag-cost-section > h3,
-.vaultrag-table-section > h3 {
+.vaultrag-stats-section>h3,
+.vaultrag-cost-section>h3,
+.vaultrag-table-section>h3 {
   font-family: var(--font-interface) !important;
   font-size: var(--font-ui-smaller) !important;
   font-weight: var(--font-semibold) !important;
@@ -796,15 +856,18 @@
 .vaultrag-file-table td:nth-child(1) {
   width: 48%;
 }
+
 .vaultrag-file-table th:nth-child(2),
 .vaultrag-file-table td:nth-child(2) {
   width: 18%;
 }
+
 .vaultrag-file-table th:nth-child(3),
 .vaultrag-file-table td:nth-child(3) {
   width: 12%;
   text-align: right;
 }
+
 .vaultrag-file-table th:nth-child(4),
 .vaultrag-file-table td:nth-child(4) {
   width: 22%;
@@ -871,6 +934,7 @@
   color: var(--color-green);
   background: rgba(var(--background-modifier-success-rgb), 0.1);
 }
+
 .vaultrag-status-indexed::before {
   background: var(--color-green);
 }
@@ -879,6 +943,7 @@
   color: var(--text-faint);
   background: var(--background-modifier-hover);
 }
+
 .vaultrag-status-not-indexed::before {
   background: var(--text-faint);
   opacity: 0.5;
@@ -888,6 +953,7 @@
   color: var(--color-red);
   background: rgba(var(--background-modifier-error-rgb), 0.1);
 }
+
 .vaultrag-status-failed::before {
   background: var(--color-red);
 }
@@ -979,6 +1045,80 @@
 }
 
 /* ═══════════════════════════════════════════════════════════════════════════
+   CONVERSATION SUMMARY MARKER
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.vaultrag-message--summary {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--size-2-2);
+  padding: var(--size-4-2) 0;
+  position: relative;
+}
+
+.vaultrag-message--summary::before,
+.vaultrag-message--summary::after {
+  content: '';
+  position: absolute;
+  top: 22px;
+  width: 28%;
+  height: 1px;
+  background: var(--background-modifier-border);
+}
+
+.vaultrag-message--summary::before {
+  left: 0;
+}
+
+.vaultrag-message--summary::after {
+  right: 0;
+}
+
+.vaultrag-summary-label {
+  font-family: var(--font-interface);
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  white-space: nowrap;
+  user-select: none;
+}
+
+.vaultrag-summary-detail {
+  width: 100%;
+}
+
+.vaultrag-summary-detail>summary {
+  font-family: var(--font-interface);
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  cursor: pointer;
+  text-align: center;
+  list-style: none;
+  outline: none;
+  transition: color var(--anim-duration-fast) var(--anim-motion-smooth);
+}
+
+.vaultrag-summary-detail>summary::-webkit-details-marker {
+  display: none;
+}
+
+.vaultrag-summary-detail>summary:hover {
+  color: var(--text-muted);
+}
+
+.vaultrag-summary-text {
+  margin: var(--size-2-3) 0 0;
+  font-family: var(--font-interface);
+  font-size: var(--font-ui-smaller);
+  color: var(--text-muted);
+  line-height: var(--line-height-normal);
+  background: var(--background-modifier-hover);
+  border: var(--border-width) solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  padding: var(--size-4-2) var(--size-4-3);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
    EMPTY STATE
    ═══════════════════════════════════════════════════════════════════════════ */
 
@@ -1005,6 +1145,71 @@
   color: var(--text-muted);
   margin: 0;
   letter-spacing: 0.01em;
+}
+
+.vaultrag-empty-sub {
+  font-family: var(--font-interface);
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  margin: 0;
+  text-align: center;
+  line-height: var(--line-height-normal);
+}
+
+.vaultrag-index-cta {
+  margin-top: var(--size-2-2);
+  padding: var(--size-2-3) var(--size-4-4);
+  font-family: var(--font-interface);
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-medium);
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+  border: none;
+  border-radius: var(--radius-m);
+  cursor: pointer;
+  transition: background var(--anim-duration-fast) var(--anim-motion-smooth);
+}
+
+.vaultrag-index-cta:hover:not(:disabled) {
+  background: var(--interactive-accent-hover);
+}
+
+.vaultrag-index-cta:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.vaultrag-cta-progress {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--size-2-2);
+  width: 100%;
+  max-width: 220px;
+  margin-top: var(--size-2-2);
+}
+
+.vaultrag-cta-progress-fill-track {
+  width: 100%;
+  height: 3px;
+  background: var(--background-modifier-border);
+  border-radius: var(--radius-l);
+  overflow: hidden;
+}
+
+.vaultrag-cta-progress-fill {
+  height: 100%;
+  width: 0%;
+  background: var(--interactive-accent);
+  border-radius: var(--radius-l);
+  transition: width 0.25s ease;
+}
+
+.vaultrag-cta-progress-text {
+  font-family: var(--font-interface);
+  font-size: var(--font-ui-smaller);
+  color: var(--text-faint);
+  font-variant-numeric: tabular-nums;
 }
 
 .vaultrag-suggestions {

@@ -3,7 +3,7 @@ import type { WorkspaceLeaf } from 'obsidian';
 import type VaultRAGPlugin from '../main';
 import type { StoredMessage } from '../settings';
 import type { Retriever, ActiveNote } from '../rag/retriever';
-import type { ChatProvider } from '../providers/base';
+import type { ChatProvider, ChatMessage } from '../providers/base';
 
 // ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -44,15 +44,24 @@ const SUGGESTION_POOL: string[] = [
  * Registered in main.ts via:
  *   `this.registerView(VIEW_TYPE_CHAT, leaf => new ChatView(leaf, this, retriever, provider))`
  */
+const HISTORY_LIMIT = 50;
+const COMPACT_KEEP  = 10; // messages to retain after compaction
+
 export class ChatView extends ItemView {
   /** In-memory copy of the conversation; flushed to data.json on every mutation. */
   private history: StoredMessage[] = [];
+
+  /** Summary of compacted turns — injected into every system prompt. */
+  private conversationSummary = '';
 
   /** Scrollable message list container. */
   private messagesEl!: HTMLElement;
 
   /** The textarea where the user types queries. */
   private inputEl!: HTMLElement;
+
+  /** The send button — disabled while a response is streaming. */
+  private sendBtn!: HTMLButtonElement;
 
   /** Empty-state placeholder — removed on first message. */
   private emptyStateEl: HTMLElement | null = null;
@@ -76,6 +85,7 @@ export class ChatView extends ItemView {
 
   async onOpen(): Promise<void> {
     this.history = [...(this.plugin.settings.chatHistory ?? [])];
+    this.conversationSummary = this.plugin.settings.chatSummary ?? '';
     this.buildDOM();
     this.hydrate();
   }
@@ -89,12 +99,32 @@ export class ChatView extends ItemView {
    * and persists both turns to history.
    */
   async sendMessage(query: string): Promise<void> {
+    // Guard: vault not indexed yet
+    if (!this.plugin.settings.lastIndexRun) {
+      this.hideEmptyState();
+      this.appendUserBubble(query);
+      const { contentEl: noticeEl } = this.createAssistantBubble();
+      void MarkdownRenderer.renderMarkdown(
+        '> [!warning] Vault not indexed\n' +
+        '> Your vault has no index yet. Run **VaultRAG: Re-index vault** from the command palette first, then ask your question.',
+        noticeEl, '', this,
+      );
+      this.scrollToBottom();
+      return;
+    }
+
     this.hideEmptyState();
+    this.setStreaming(true);
+
     // Append user bubble immediately for responsiveness
     this.appendUserBubble(query);
 
-    // Create assistant bubble with a placeholder
+    // Create assistant bubble with typing indicator
     const { bubbleEl, contentEl: responseEl } = this.createAssistantBubble();
+    const typingEl = bubbleEl.createEl('div', { cls: 'vaultrag-typing' });
+    typingEl.createEl('span');
+    typingEl.createEl('span');
+    typingEl.createEl('span');
 
     let fullResponse = '';
 
@@ -103,19 +133,43 @@ export class ChatView extends ItemView {
       const activeNote = this.getActiveNote();
       const messages = this.retriever.buildPrompt(query, chunks, activeNote ?? undefined);
 
+      // Inject compacted-history summary into the system message so the model
+      // retains context from turns that have been rolled off the visible history.
+      if (this.conversationSummary) {
+        messages[0].content +=
+          '\n\n<conversation-summary>\n' +
+          'Summary of earlier conversation turns:\n' +
+          this.conversationSummary +
+          '\n</conversation-summary>';
+      }
+
       const stream = this.chatProvider.chat(messages, {
         model: this.activeChatModel(),
         maxTokens: 2048,
       });
 
-      // Accumulate streamed tokens; raw text during streaming
+      // Throttled markdown render — re-renders every 80 ms so formatting
+      // (headings, code blocks, lists) appears live during streaming.
+      let renderTimer: ReturnType<typeof setTimeout> | null = null;
+      const scheduleRender = () => {
+        if (renderTimer !== null) return;
+        renderTimer = setTimeout(() => {
+          renderTimer = null;
+          responseEl.empty();
+          void MarkdownRenderer.renderMarkdown(fullResponse, responseEl, '', this);
+          this.scrollToBottom();
+        }, 80);
+      };
+
       for await (const token of stream) {
+        if (typingEl.isConnected) typingEl.remove();
         fullResponse += token;
-        (responseEl as HTMLElement & { textContent: string }).textContent = fullResponse;
+        scheduleRender();
       }
 
-      // Replace raw text with markdown-rendered content
-      (responseEl as HTMLElement & { textContent: string }).textContent = '';
+      // Final authoritative render once stream is complete
+      if (renderTimer !== null) { clearTimeout(renderTimer); renderTimer = null; }
+      responseEl.empty();
       await MarkdownRenderer.renderMarkdown(fullResponse, responseEl, '', this);
 
       // Sources block
@@ -134,7 +188,13 @@ export class ChatView extends ItemView {
       );
       await this.saveHistory();
 
+      // Compact once the hard limit is reached
+      if (this.history.length >= HISTORY_LIMIT) {
+        void this.compactHistory();
+      }
+
     } catch (err) {
+      typingEl.remove();
       const msg = err instanceof Error ? err.message : 'An unexpected error occurred.';
       (responseEl as HTMLElement & { textContent: string }).textContent = '';
       await MarkdownRenderer.renderMarkdown(
@@ -143,15 +203,96 @@ export class ChatView extends ItemView {
         '',
         this,
       );
+    } finally {
+      this.setStreaming(false);
     }
   }
 
   /** Wipes the conversation and persists the empty state. */
   clearHistory(): void {
     this.history = [];
+    this.conversationSummary = '';
     this.messagesEl.empty();
     void this.saveHistory();
     this.showEmptyState();
+  }
+
+  // ── History compaction ─────────────────────────────────────────────────────
+
+  /**
+   * When history reaches HISTORY_LIMIT, summarise the oldest
+   * (HISTORY_LIMIT - COMPACT_KEEP) turns via the chat provider, store the
+   * summary in settings, and replace those turns with a single summary marker.
+   */
+  private async compactHistory(): Promise<void> {
+    const cutoff = this.history.length - COMPACT_KEEP;
+    const toSummarise = this.history.slice(0, cutoff).filter(m => m.role !== 'summary');
+    const recent      = this.history.slice(cutoff);
+
+    // Build a plain-text transcript for the summarisation request
+    const transcript = toSummarise
+      .map(m => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
+      .join('\n\n');
+
+    const summariseMessages: ChatMessage[] = [
+      {
+        role: 'system',
+        content:
+          'You are a concise summariser. Summarise the conversation below, ' +
+          'preserving all key topics, decisions, and context needed to continue ' +
+          'the conversation. Be brief but complete. Output only the summary.',
+      },
+      { role: 'user', content: transcript },
+    ];
+
+    let summary = '';
+    try {
+      const stream = this.chatProvider.chat(summariseMessages, {
+        model: this.activeChatModel(),
+        maxTokens: 512,
+      });
+      for await (const token of stream) {
+        summary += token;
+      }
+    } catch {
+      // Summarisation failed — just truncate without a summary to avoid blocking
+      this.history = recent;
+      await this.saveHistory();
+      return;
+    }
+
+    this.conversationSummary = summary;
+
+    // Replace compacted turns with a single summary marker visible in the UI
+    const marker: StoredMessage = {
+      role: 'summary',
+      content: summary,
+      sources: [],
+      timestamp: Date.now(),
+    };
+
+    this.history = [marker, ...recent];
+    await this.saveHistory();
+
+    // Render the marker into the message list
+    this.renderSummaryMarker(summary);
+  }
+
+  private renderSummaryMarker(summary: string): void {
+    // Insert before the first message that is NOT the old summary marker
+    const firstRecent = this.messagesEl.querySelector(
+      '.vaultrag-message:not(.vaultrag-message--summary)',
+    );
+    const el = createEl('div', { cls: 'vaultrag-message vaultrag-message--summary' });
+    el.createEl('span', { cls: 'vaultrag-summary-label', text: '⬆ Earlier conversation summarised' });
+    const toggle = el.createEl('details', { cls: 'vaultrag-summary-detail' });
+    toggle.createEl('summary', { text: 'View summary' });
+    toggle.createEl('p', { cls: 'vaultrag-summary-text', text: summary });
+    if (firstRecent) {
+      this.messagesEl.insertBefore(el, firstRecent);
+    } else {
+      this.messagesEl.appendChild(el);
+    }
   }
 
   /**
@@ -180,6 +321,10 @@ export class ChatView extends ItemView {
 
   // ── DOM construction ───────────────────────────────────────────────────────
 
+  private setStreaming(active: boolean): void {
+    this.sendBtn.disabled = active;
+  }
+
   private buildDOM(): void {
     const { contentEl } = this;
     contentEl.empty();
@@ -198,8 +343,8 @@ export class ChatView extends ItemView {
     this.inputEl = inputRow.createEl('textarea', { cls: 'vaultrag-input' });
     (this.inputEl as HTMLElement & { placeholder: string }).placeholder = 'Ask your vault…';
 
-    const sendBtn = inputRow.createEl('button', { text: 'Send ➤', cls: 'vaultrag-send-btn' });
-    sendBtn.addEventListener('click', () => {
+    this.sendBtn = inputRow.createEl('button', { text: 'Send ➤', cls: 'vaultrag-send-btn' });
+    this.sendBtn.addEventListener('click', () => {
       const query = ((this.inputEl as HTMLElement & { value: string }).value ?? '').trim();
       if (query) {
         (this.inputEl as HTMLElement & { value: string }).value = '';
@@ -212,6 +357,7 @@ export class ChatView extends ItemView {
       const ke = e as KeyboardEvent;
       if (ke.key === 'Enter' && !ke.shiftKey) {
         ke.preventDefault();
+        if (this.sendBtn.disabled) return;
         const query = ((this.inputEl as HTMLElement & { value: string }).value ?? '').trim();
         if (query) {
           (this.inputEl as HTMLElement & { value: string }).value = '';
@@ -230,6 +376,8 @@ export class ChatView extends ItemView {
     for (const msg of this.history) {
       if (msg.role === 'user') {
         this.appendUserBubble(msg.content);
+      } else if (msg.role === 'summary') {
+        this.renderSummaryMarker(msg.content);
       } else {
         const { bubbleEl, contentEl: responseEl } = this.createAssistantBubble();
         void MarkdownRenderer.renderMarkdown(msg.content, responseEl, '', this);
@@ -247,11 +395,67 @@ export class ChatView extends ItemView {
   private showEmptyState(): void {
     if (this.emptyStateEl) return;
 
-    // Pick 5 random suggestions without repetition
+    const el = this.messagesEl.createEl('div', { cls: 'vaultrag-empty-state' });
+
+    // ── Not indexed yet ──────────────────────────────────────────────────────
+    if (!this.plugin.settings.lastIndexRun) {
+      el.createEl('div', { cls: 'vaultrag-empty-emoji', text: '📂' });
+      el.createEl('p', { cls: 'vaultrag-empty-hint', text: 'Vault not indexed yet' });
+      el.createEl('p', { cls: 'vaultrag-empty-sub', text: 'Index your vault once to start chatting with your notes.' });
+
+      const btn = el.createEl('button', { cls: 'vaultrag-index-cta', text: 'Re-index vault' });
+
+      // Progress bar (hidden until indexing starts)
+      const progressWrap  = el.createEl('div', { cls: 'vaultrag-cta-progress' });
+      const track         = progressWrap.createEl('div', { cls: 'vaultrag-cta-progress-fill-track' });
+      const progressBar   = track.createEl('div', { cls: 'vaultrag-cta-progress-fill' });
+      const progressText  = progressWrap.createEl('span', { cls: 'vaultrag-cta-progress-text', text: 'Starting…' });
+      progressWrap.style.display = 'none';
+
+      // If already running when the panel opens, subscribe immediately
+      const startListening = () => {
+        btn.disabled = true;
+        btn.textContent = 'Indexing…';
+        progressWrap.style.display = 'flex';
+
+        const unsub = this.plugin.onReindexProgress((done, total) => {
+          if (done === -1) {
+            // Completion sentinel
+            unsub();
+            btn.disabled = false;
+            btn.textContent = 'Re-index vault';
+            progressWrap.style.display = 'none';
+            // Refresh the empty state — vault is now indexed
+            this.hideEmptyState();
+            this.showEmptyState();
+            return;
+          }
+          if (total > 0) {
+            const pct = Math.round((done / total) * 100);
+            progressBar.style.width = `${pct}%`;
+            progressText.textContent = `${done} / ${total} files`;
+          } else {
+            progressText.textContent = 'Preparing…';
+          }
+          this.scrollToBottom();
+        });
+      };
+
+      if (this.plugin.isReindexing) startListening();
+
+      btn.addEventListener('click', () => {
+        startListening();
+        void this.plugin.runReIndex();
+      });
+
+      this.emptyStateEl = el;
+      return;
+    }
+
+    // ── Ready — show suggestion chips ────────────────────────────────────────
     const shuffled = [...SUGGESTION_POOL].sort(() => Math.random() - 0.5);
     const picks = shuffled.slice(0, 5);
 
-    const el = this.messagesEl.createEl('div', { cls: 'vaultrag-empty-state' });
     el.createEl('div', { cls: 'vaultrag-empty-emoji', text: '🔮' });
     el.createEl('p', { cls: 'vaultrag-empty-hint', text: 'Ask your vault anything' });
 
@@ -261,7 +465,6 @@ export class ChatView extends ItemView {
       chip.addEventListener('click', () => {
         (this.inputEl as HTMLTextAreaElement).value = q;
         (this.inputEl as HTMLTextAreaElement).focus();
-        // trigger auto-resize if textarea has grown
         this.inputEl.dispatchEvent(new Event('input'));
       });
     }
@@ -370,6 +573,7 @@ export class ChatView extends ItemView {
 
   private async saveHistory(): Promise<void> {
     this.plugin.settings.chatHistory = this.history.slice();
+    this.plugin.settings.chatSummary = this.conversationSummary;
     await this.plugin.saveSettings();
   }
 }

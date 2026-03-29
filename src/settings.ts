@@ -29,7 +29,7 @@ export interface LastIndexRun {
  * Stored inside `chatHistory` in data.json.
  */
 export interface StoredMessage {
-  role: 'user' | 'assistant';
+  role: 'user' | 'assistant' | 'summary';
   content: string;
   /** Vault file paths of chunks that informed this response. */
   sources: string[];
@@ -70,13 +70,18 @@ export interface PluginSettings {
    */
   systemPrompt: string;
 
-  // ── Floating chat panel ───────────────────────────────────────────────────
-  /** Persisted conversation turns shown in the floating chat panel. */
+  // ── Chat history ──────────────────────────────────────────────────────────
+  /** Persisted conversation turns (capped at 50; older turns are compacted). */
   chatHistory: StoredMessage[];
   /** Pixel width of the floating chat panel (min 280, max 720). */
   chatPanelWidth: number;
   /** Whether the floating panel is open. Restored on plugin reload. */
   chatPanelOpen: boolean;
+  /**
+   * AI-generated summary of conversation turns compacted out when history
+   * exceeded 50 messages. Injected into the system prompt to preserve context.
+   */
+  chatSummary: string;
 
   // ── Index dashboard ───────────────────────────────────────────────────────
   /** Snapshot of the last indexAll() run; null when the vault has never been indexed. */
@@ -118,6 +123,7 @@ export const DEFAULT_SETTINGS: Readonly<PluginSettings> = {
   chatHistory: [],
   chatPanelWidth: 380,
   chatPanelOpen: false,
+  chatSummary: '',
 
   lastIndexRun: null,
   totalTokensIndexed: 0,
