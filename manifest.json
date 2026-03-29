@@ -1,7 +1,7 @@
 {
   "id": "vaultrag",
   "name": "VaultRAG",
-  "version": "0.0.1",
+  "version": "0.0.2-alpha",
   "minAppVersion": "1.4.0",
   "description": "Retrieval-Augmented Generation for your Obsidian vault — chat with your notes using multi-provider AI.",
   "author": "Suraj Singh",
